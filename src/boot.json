@@ -2,8 +2,13 @@
     "name": "CloudSaveS3",
     "version": "0.0.1",
     "styleFileList": [],
-    "scriptFileList": [],
+    "scriptFileList": [
+        "cloudsave_settings_script.js",
+        "cloudsave_s3_adapter.js"
+    ],
     "tweeFileList": [],
     "imgFileList": [],
-    "additionFile": []
+    "additionFile": [
+        "readme.txt"
+    ]
 }
