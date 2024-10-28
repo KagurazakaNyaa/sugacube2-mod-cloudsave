@@ -1,13 +1,12 @@
-FROM node:lts AS builder
+FROM alpine:3 AS downloader
 
-RUN corepack enable
-WORKDIR /src
-RUN git clone --depth=1 https://github.com/Lyoko-Jeremie/sugarcube-2-ModLoader.git /src &&\
-    yarn &&\
-    yarn run webpack:insertTools
+WORKDIR /tmp
+RUN apk add --no-cache wget unzip &&\
+    wget https://github.com/Lyoko-Jeremie/sugarcube-2-ModLoader/releases/download/tools-1/insertTools.zip &&\
+    unzip insertTools.zip -d insertTools
 
 FROM node:lts
-COPY --from=builder /src/dist-insertTools /tools
+COPY --from=downloader /tmp/insertTools /tools
 VOLUME [ "/src" ]
 WORKDIR /src
 CMD [ "node", "/tools/packModZip.js", "/src/boot.json" ]
