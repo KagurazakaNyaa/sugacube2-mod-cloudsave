@@ -4,7 +4,7 @@
     "styleFileList": [],
     "scriptFileList": [
         "cloudsave_settings_script.js",
-        "cloudsave_s3_adapter.js"
+        "cloudsave_s3_adapter_script.js"
     ],
     "tweeFileList": [],
     "imgFileList": [],
