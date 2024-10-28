@@ -79,47 +79,54 @@ async function signAWSv4(
   return await hmac(signingKey, stringToSign);
 }
 
+function getCloudsaveSettings() {
+  const s3Settings = {
+    s3Protocol: Setting.getValue("cloudsave_s3_protocol"),
+    s3Endpoint: Setting.getValue("cloudsave_s3_endpoint"),
+    s3Region: Setting.getValue("cloudsave_s3_region"),
+    s3Bucket: Setting.getValue("cloudsave_s3_bucket"),
+    s3AccessKey: Setting.getValue("cloudsave_s3_accesskey"),
+    s3SecretKey: Setting.getValue("cloudsave_s3_secretkey"),
+    s3ObjectKey: Setting.getValue("cloudsave_s3_objectkey"),
+  };
+  return s3Settings;
+}
+
 let upload_save_to_s3 = async function () {
-  const s3Protocol = Setting.getValue("cloudsave_s3_protocol");
-  const s3Endpoint = Setting.getValue("cloudsave_s3_endpoint");
-  const s3Region = Setting.getValue("cloudsave_s3_region");
-  const s3Bucket = Setting.getValue("cloudsave_s3_bucket");
-  const s3AccessKey = Setting.getValue("cloudsave_s3_accesskey");
-  const s3SecretKey = Setting.getValue("cloudsave_s3_secretkey");
-  const s3ObjectKey = Setting.getValue("cloudsave_s3_objectkey");
+  const s3Settings = getCloudsaveSettings();
   const saveData = Save.base64.export();
   const saveDataSha256 = await digestMessage(saveData);
   const now = new Date();
   const nowIso8601 = now.toISOString();
   const signDate = formatDateYYYYMMDD(now);
-  const scope = `${signDate}/${s3Region}/S3/aws4_request`;
+  const scope = `${signDate}/${s3Settings.s3Region}/S3/aws4_request`;
   const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-  let requestUrl = `${s3Protocol}://`;
+  let requestUrl = `${s3Settings.s3Protocol}://`;
   if (Setting.getValue("cloudsave_s3_pathstyle")) {
-    requestUrl += `${s3Endpoint}/${s3Bucket}/${s3ObjectKey}`;
+    requestUrl += `${s3Settings.s3Endpoint}/${s3Settings.s3Bucket}/${s3Settings.s3ObjectKey}`;
   } else {
-    requestUrl += `${s3Bucket}.${s3Endpoint}/${s3ObjectKey}`;
+    requestUrl += `${s3Settings.s3Bucket}.${s3Settings.s3Endpoint}/${s3Settings.s3ObjectKey}`;
   }
   const canonicalRequestSha256 = await digestCanonicalRequest(
     "PUT",
-    requestUrl,
+    s3Settings.s3ObjectKey,
     "",
-    `host:${s3Endpoint}\nx-amz-content-sha256:${saveDataSha256}\nx-amz-date:${nowIso8601}\n`,
+    `host:${s3Settings.s3Endpoint}\nx-amz-content-sha256:${saveDataSha256}\nx-amz-date:${nowIso8601}\n`,
     signedHeaders,
     saveDataSha256
   );
   const signature = await signAWSv4(
     canonicalRequestSha256,
     scope,
-    s3Region,
+    s3Settings.s3Region,
     nowIso8601,
     signDate,
-    s3SecretKey
+    s3Settings.s3SecretKey
   );
   fetch(requestUrl, {
     method: "PUT",
     headers: {
-      Authorization: `AWS4-HMAC-SHA256 Credential=${s3AccessKey}/${scope},SignedHeaders=${signedHeaders},Signature=${signature}`,
+      Authorization: `AWS4-HMAC-SHA256 Credential=${s3Settings.s3AccessKey}/${scope},SignedHeaders=${signedHeaders},Signature=${signature}`,
       "x-amz-date": nowIso8601,
       "x-amz-content-sha256": saveDataSha256,
     },
@@ -129,4 +136,53 @@ let upload_save_to_s3 = async function () {
       UI.alert("Upload save failed.");
     }
   });
+};
+
+let download_save_from_s3 = async function () {
+  const s3Settings = getCloudsaveSettings();
+  const now = new Date();
+  const nowIso8601 = now.toISOString();
+  const signDate = formatDateYYYYMMDD(now);
+  const scope = `${signDate}/${s3Settings.s3Region}/S3/aws4_request`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const requestPayloadSha256 = await digestMessage(""); // should be "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  const canonicalRequestSha256 = await digestCanonicalRequest(
+    "GET",
+    s3Settings.s3ObjectKey,
+    "",
+    `host:${s3Settings.s3Endpoint}\nx-amz-content-sha256:${requestPayloadSha256}\nx-amz-date:${nowIso8601}\n`,
+    signedHeaders,
+    requestPayloadSha256
+  );
+  const signature = await signAWSv4(
+    canonicalRequestSha256,
+    scope,
+    s3Settings.s3Region,
+    nowIso8601,
+    signDate,
+    s3Settings.s3SecretKey
+  );
+  fetch(requestUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `AWS4-HMAC-SHA256 Credential=${s3Settings.s3AccessKey}/${scope},SignedHeaders=${signedHeaders},Signature=${signature}`,
+      "x-amz-date": nowIso8601,
+      "x-amz-content-sha256": requestPayloadSha256,
+    },
+    body: saveData,
+  })
+    .then((response) => response.text())
+    .then((base64Bundle) => {
+      Save.base64
+        .import(base64Bundle)
+        .then(() => {
+          /* Success.  Do something special. */
+          UI.alert("Import save from cloud successful!");
+        })
+        .catch((error) => {
+          /* Failure.  Handle the error. */
+          console.error(error);
+          UI.alert(error);
+        });
+    });
 };
