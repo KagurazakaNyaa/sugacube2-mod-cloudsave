@@ -8,6 +8,6 @@ RUN git clone --depth=1 https://github.com/Lyoko-Jeremie/sugarcube-2-ModLoader.g
 
 FROM node:lts
 COPY --from=builder /src/dist-insertTools /tools
-VOLUME [ "/src", "/dist" ]
-WORKDIR /dist
+VOLUME [ "/src" ]
+WORKDIR /src
 CMD [ "node", "/tools/packModZip.js", "/src/boot.json" ]
