@@ -1,0 +1,27 @@
+name: Build and release mod
+
+on:
+  push:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build mod.zip
+        run: ./packmod.sh
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build_result
+          path: src/CloudSaveS3.mod.zip
+
+      - name: Upload Artifact to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src/CloudSaveS3.mod.zip
