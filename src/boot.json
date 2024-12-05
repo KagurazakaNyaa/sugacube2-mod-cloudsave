@@ -2,13 +2,39 @@
     "name": "CloudSaveS3",
     "version": "0.0.1",
     "styleFileList": [],
-    "scriptFileList": [
-        "cloudsave_settings_script.js",
-        "cloudsave_s3_adapter_script.js"
+    "scriptFileList_inject_early": [
+        "js/framework_init_script_early.js"
     ],
-    "tweeFileList": [],
+    "scriptFileList": [
+        "js/cloudsave_s3_adapter_script.js"
+    ],
+    "tweeFileList": [
+        "twee/options.twee"
+    ],
     "imgFileList": [],
     "additionFile": [
         "readme.txt"
+    ],
+    "addonPlugin": [
+        {
+            "modName": "TweeReplacer",
+            "addonName": "TweeReplacerAddon",
+            "modVersion": "1.0.0",
+            "params": []
+        }
+    ],
+    "dependenceInfo": [
+        {
+            "modName": "TweeReplacer",
+            "version": "^1.0.0"
+        },
+        {
+            "modName": "ReplacePatcher",
+            "version": "^1.0.0"
+        },
+        {
+            "modName": "Simple Frameworks",
+            "version": ">=1.15.0"
+        }
     ]
 }

@@ -1,0 +1,21 @@
+:: cloudsaveOptions [widget]
+<<widget "cloudsaveOptions">>
+
+<div class="settingsHeader options"><span class="gold">云存档</span></div>
+
+<div class="settingsGrid">
+	<div class="settingsToggleItemWide">
+		<span class="gold">S3设置</span><mouse class="tooltip linkBlue">(?)<span>设定连接到用于存储存档的S3服务。</span></mouse><br>
+		<label>S3使用路径模式</label><mouse class="tooltip linkBlue">(?)<span>Minio建议开启</span></mouse>: <<checkbox "$options.cloudsave_s3_pathstyle" false true>><br>
+		<label>S3服务器使用HTTPS</label><mouse class="tooltip linkBlue">(?)<span>如果非自建服务器应当默认是HTTPS</span></mouse>: <<checkbox "$options.cloudsave_s3_protocol" "http" "https" autocheck>><br>
+		Endpoint: <<textbox "$options.cloudsave_s3_endpoint" $options.cloudsave_s3_endpoint>><br>
+		地区: <<textbox "$options.cloudsave_s3_region" $options.cloudsave_s3_region>><br>
+		存储桶: <<textbox "$options.cloudsave_s3_bucket" $options.cloudsave_s3_bucket>><br>
+		Access Key: <<textbox "$options.cloudsave_s3_accesskey" $options.cloudsave_s3_accesskey>><br>
+		Secret Key: <<textbox "$options.cloudsave_s3_secretkey" $options.cloudsave_s3_secretkey>><br>
+		对象名<mouse class="tooltip linkBlue">(?)<span>如果不知道是什么就随机生成一串字符</span></mouse>: <<textbox "$options.cloudsave_s3_objectkey" $options.cloudsave_s3_objectkey>><br>
+	</div>
+</div>
+<hr>
+
+<</widget>>

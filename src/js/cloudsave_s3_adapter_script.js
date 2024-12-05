@@ -81,13 +81,14 @@ async function signAWSv4(
 
 function getCloudsaveSettings() {
   const s3Settings = {
-    s3Protocol: Setting.getValue("cloudsave_s3_protocol"),
-    s3Endpoint: Setting.getValue("cloudsave_s3_endpoint"),
-    s3Region: Setting.getValue("cloudsave_s3_region"),
-    s3Bucket: Setting.getValue("cloudsave_s3_bucket"),
-    s3AccessKey: Setting.getValue("cloudsave_s3_accesskey"),
-    s3SecretKey: Setting.getValue("cloudsave_s3_secretkey"),
-    s3ObjectKey: Setting.getValue("cloudsave_s3_objectkey"),
+    s3Protocol: V.options["cloudsave_s3_protocol"],
+    s3Endpoint: V.options["cloudsave_s3_endpoint"],
+    s3Region: V.options["cloudsave_s3_region"],
+    s3Bucket: V.options["cloudsave_s3_bucket"],
+    s3AccessKey: V.options["cloudsave_s3_accesskey"],
+    s3SecretKey: V.options["cloudsave_s3_secretkey"],
+    s3ObjectKey: V.options["cloudsave_s3_objectkey"],
+    s3PathStyle: V.options["cloudsave_s3_pathstyle"],
   };
   return s3Settings;
 }
@@ -102,7 +103,7 @@ let upload_save_to_s3 = async function () {
   const scope = `${signDate}/${s3Settings.s3Region}/S3/aws4_request`;
   const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
   let requestUrl = `${s3Settings.s3Protocol}://`;
-  if (Setting.getValue("cloudsave_s3_pathstyle")) {
+  if (s3Settings.s3PathStyle) {
     requestUrl += `${s3Settings.s3Endpoint}/${s3Settings.s3Bucket}/${s3Settings.s3ObjectKey}`;
   } else {
     requestUrl += `${s3Settings.s3Bucket}.${s3Settings.s3Endpoint}/${s3Settings.s3ObjectKey}`;
