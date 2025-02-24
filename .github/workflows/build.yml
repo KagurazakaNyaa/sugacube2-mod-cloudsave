@@ -10,14 +10,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build modpacker conatiner
-        run: docker build . -t modpacker:latest -f modpack.dockerfile
-
       - name: Build modpack
-        run: docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)/src":/src modpacker:latest
+        run: docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)/src":/src ghcr.io/lyoko-jeremie/sugarcube-2-modloader-inserttools:latest
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
