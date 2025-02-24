@@ -6,12 +6,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # BUILDER_IMAGE: ghcr.io/lyoko-jeremie/sugarcube-2-modloader-inserttools:latest
+      BUILDER_IMAGE: ghcr.io/kagurazakanyaa/sugarcube-2-modloader-inserttools:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build modpack
-        run: docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)/src":/src ghcr.io/lyoko-jeremie/sugarcube-2-modloader-inserttools:latest
+        run: docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)/src":/src ${{ env.BUILDER_IMAGE }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
