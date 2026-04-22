@@ -1,189 +1,283 @@
+const CLOUDSAVE_EMPTY_SHA256 =
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+const CLOUDSAVE_SIGNED_HEADERS = "host;x-amz-content-sha256;x-amz-date";
+
 function formatDateYYYYMMDD(date) {
-  let d = new Date(date),
-    month = "" + (d.getMonth() + 1),
-    day = "" + d.getDate(),
-    year = d.getFullYear();
+  const d = new Date(date);
+  const month = `${d.getUTCMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getUTCDate()}`.padStart(2, "0");
+  const year = d.getUTCFullYear();
 
-  if (month.length < 2) month = "0" + month;
-  if (day.length < 2) day = "0" + day;
+  return `${year}${month}${day}`;
+}
 
-  return [year, month, day].join("");
+function formatAmzDate(date) {
+  return new Date(date).toISOString().replace(/[:-]|\.\d{3}/g, "");
+}
+
+function stringToUint8Array(value) {
+  return new TextEncoder().encode(value);
+}
+
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function encodeS3PathSegment(segment) {
+  return encodeURIComponent(segment).replace(/[!'()*]/g, (char) =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+  );
 }
 
 async function digestMessage(message) {
-  const msgUint8 = new TextEncoder().encode(message); // encode as (utf-8) Uint8Array
-  const hashBuffer = await window.crypto.subtle.digest("SHA-256", msgUint8); // hash the message
-  const hashArray = Array.from(new Uint8Array(hashBuffer)); // convert buffer to byte array
-  const hashHex = hashArray
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join(""); // convert bytes to hex string
-  return hashHex;
+  const hashBuffer = await window.crypto.subtle.digest(
+    "SHA-256",
+    stringToUint8Array(message)
+  );
+  return toHex(hashBuffer);
 }
 
-async function digestCanonicalRequest(
-  httpMethod,
-  cannonicalUri,
-  canonicalQueryString,
-  canonicalHeaders,
-  signedHeaders,
-  hashedPayload
-) {
-  const canonicalRequest = `${httpMethod}\n${cannonicalUri}\n${canonicalQueryString}\n,${canonicalHeaders}\n,${signedHeaders}\n${hashedPayload}`;
-  return digestMessage(canonicalRequest);
-}
+async function hmacSha256(key, message) {
+  const keyData =
+    typeof key === "string" ? stringToUint8Array(key) : new Uint8Array(key);
+  const messageData =
+    typeof message === "string"
+      ? stringToUint8Array(message)
+      : new Uint8Array(message);
 
-async function hmac(secretKey, message) {
-  // Convert the message and secretKey to Uint8Array
-  const encoder = new TextEncoder();
-  const messageUint8Array = encoder.encode(message);
-  const keyUint8Array = encoder.encode(secretKey);
-
-  // Import the secretKey as a CryptoKey
   const cryptoKey = await window.crypto.subtle.importKey(
     "raw",
-    keyUint8Array,
+    keyData,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
 
-  // Sign the message with HMAC and the CryptoKey
-  const signature = await window.crypto.subtle.sign(
-    "HMAC",
-    cryptoKey,
-    messageUint8Array
+  return new Uint8Array(
+    await window.crypto.subtle.sign("HMAC", cryptoKey, messageData)
   );
-
-  // Convert the signature ArrayBuffer to a hex string
-  const hashArray = Array.from(new Uint8Array(signature));
-  const hashHex = hashArray
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  return hashHex;
-}
-
-async function signAWSv4(
-  canonicalRequestSha256,
-  scope,
-  s3Region,
-  timestampISO8601,
-  signDate,
-  secretKey
-) {
-  const stringToSign = `AWS4-HMAC-SHA256\n${timestampISO8601}\n${scope}\n${canonicalRequestSha256}`;
-  const dateKey = await hmac("AWS4" + secretKey, signDate);
-  const dateRegionKey = await hmac(dateKey, s3Region);
-  const dateRegionServiceKey = await hmac(dateRegionKey, "s3");
-  const signingKey = await hmac(dateRegionServiceKey, "aws4_request");
-  return await hmac(signingKey, stringToSign);
 }
 
 function getCloudsaveSettings() {
-  const s3Settings = {
-    s3Protocol: V.options["cloudsave_s3_protocol"],
-    s3Endpoint: V.options["cloudsave_s3_endpoint"],
-    s3Region: V.options["cloudsave_s3_region"],
-    s3Bucket: V.options["cloudsave_s3_bucket"],
-    s3AccessKey: V.options["cloudsave_s3_accesskey"],
-    s3SecretKey: V.options["cloudsave_s3_secretkey"],
-    s3ObjectKey: V.options["cloudsave_s3_objectkey"],
-    s3PathStyle: V.options["cloudsave_s3_pathstyle"],
+  return {
+    s3Protocol: V.options["cloudsave_s3_protocol"] || "https",
+    s3Endpoint: V.options["cloudsave_s3_endpoint"] || "",
+    s3Region: V.options["cloudsave_s3_region"] || "",
+    s3Bucket: V.options["cloudsave_s3_bucket"] || "",
+    s3AccessKey: V.options["cloudsave_s3_accesskey"] || "",
+    s3SecretKey: V.options["cloudsave_s3_secretkey"] || "",
+    s3ObjectKey: V.options["cloudsave_s3_objectkey"] || "",
+    s3PathStyle: Boolean(V.options["cloudsave_s3_pathstyle"]),
   };
-  return s3Settings;
 }
 
-let upload_save_to_s3 = async function () {
-  const s3Settings = getCloudsaveSettings();
-  const saveData = Save.base64.export();
-  const saveDataSha256 = await digestMessage(saveData);
-  const now = new Date();
-  const nowIso8601 = now.toISOString();
-  const signDate = formatDateYYYYMMDD(now);
-  const scope = `${signDate}/${s3Settings.s3Region}/S3/aws4_request`;
-  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-  let requestUrl = `${s3Settings.s3Protocol}://`;
-  if (s3Settings.s3PathStyle) {
-    requestUrl += `${s3Settings.s3Endpoint}/${s3Settings.s3Bucket}/${s3Settings.s3ObjectKey}`;
-  } else {
-    requestUrl += `${s3Settings.s3Bucket}.${s3Settings.s3Endpoint}/${s3Settings.s3ObjectKey}`;
-  }
-  const canonicalRequestSha256 = await digestCanonicalRequest(
-    "PUT",
-    s3Settings.s3ObjectKey,
-    "",
-    `host:${s3Settings.s3Endpoint}\nx-amz-content-sha256:${saveDataSha256}\nx-amz-date:${nowIso8601}\n`,
-    signedHeaders,
-    saveDataSha256
-  );
-  const signature = await signAWSv4(
-    canonicalRequestSha256,
-    scope,
-    s3Settings.s3Region,
-    nowIso8601,
-    signDate,
-    s3Settings.s3SecretKey
-  );
-  fetch(requestUrl, {
-    method: "PUT",
-    headers: {
-      Authorization: `AWS4-HMAC-SHA256 Credential=${s3Settings.s3AccessKey}/${scope},SignedHeaders=${signedHeaders},Signature=${signature}`,
-      "x-amz-date": nowIso8601,
-      "x-amz-content-sha256": saveDataSha256,
-    },
-    body: saveData,
-  }).then((response) => {
-    if (!response.ok) {
-      UI.alert("Upload save failed.");
-    }
-  });
-};
+function sanitizeEndpoint(endpoint) {
+  const sanitizedEndpoint = endpoint
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
 
-let download_save_from_s3 = async function () {
-  const s3Settings = getCloudsaveSettings();
-  const now = new Date();
-  const nowIso8601 = now.toISOString();
-  const signDate = formatDateYYYYMMDD(now);
-  const scope = `${signDate}/${s3Settings.s3Region}/S3/aws4_request`;
-  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-  const requestPayloadSha256 = await digestMessage(""); // should be "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  const canonicalRequestSha256 = await digestCanonicalRequest(
-    "GET",
-    s3Settings.s3ObjectKey,
+  if (!sanitizedEndpoint) {
+    return "";
+  }
+
+  let parsedEndpoint;
+
+  try {
+    parsedEndpoint = new URL(`https://${sanitizedEndpoint}`);
+  } catch (error) {
+    throw new Error("Endpoint 格式无效，请只填写主机名或主机名:端口");
+  }
+
+  if (
+    parsedEndpoint.username ||
+    parsedEndpoint.password ||
+    parsedEndpoint.pathname !== "/" ||
+    parsedEndpoint.search ||
+    parsedEndpoint.hash
+  ) {
+    throw new Error("Endpoint 不能包含路径、查询参数或片段");
+  }
+
+  return parsedEndpoint.host;
+}
+
+function buildS3Target(settings) {
+  const endpoint = sanitizeEndpoint(settings.s3Endpoint);
+  const bucket = settings.s3Bucket.trim();
+  const objectPath = settings.s3ObjectKey
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map(encodeS3PathSegment)
+    .join("/");
+  const canonicalObjectPath = `/${objectPath}`;
+
+  if (settings.s3PathStyle) {
+    const host = endpoint;
+    const canonicalUri = `/${encodeS3PathSegment(bucket)}${canonicalObjectPath}`;
+
+    return {
+      host,
+      canonicalUri,
+      requestUrl: `${settings.s3Protocol}://${host}${canonicalUri}`,
+    };
+  }
+
+  const host = `${bucket}.${endpoint}`;
+
+  return {
+    host,
+    canonicalUri: canonicalObjectPath,
+    requestUrl: `${settings.s3Protocol}://${host}${canonicalObjectPath}`,
+  };
+}
+
+function validateCloudsaveSettings(settings) {
+  const requiredFields = [
+    ["S3 协议", settings.s3Protocol],
+    ["Endpoint", settings.s3Endpoint],
+    ["地区", settings.s3Region],
+    ["存储桶", settings.s3Bucket],
+    ["Access Key", settings.s3AccessKey],
+    ["Secret Key", settings.s3SecretKey],
+    ["对象名", settings.s3ObjectKey],
+  ];
+
+  const missingFields = requiredFields
+    .filter(([, value]) => !String(value).trim())
+    .map(([label]) => label);
+
+  if (missingFields.length > 0) {
+    throw new Error(`缺少云存档配置：${missingFields.join("、")}`);
+  }
+}
+
+async function createAuthorizationHeaders(method, settings, payloadHash) {
+  const timestamp = new Date();
+  const amzDate = formatAmzDate(timestamp);
+  const signDate = formatDateYYYYMMDD(timestamp);
+  const scope = `${signDate}/${settings.s3Region}/s3/aws4_request`;
+  const { host, canonicalUri } = buildS3Target(settings);
+  const canonicalHeaders = [
+    `host:${host}`,
+    `x-amz-content-sha256:${payloadHash}`,
+    `x-amz-date:${amzDate}`,
+  ].join("\n");
+  const canonicalRequest = [
+    method,
+    canonicalUri,
     "",
-    `host:${s3Settings.s3Endpoint}\nx-amz-content-sha256:${requestPayloadSha256}\nx-amz-date:${nowIso8601}\n`,
-    signedHeaders,
-    requestPayloadSha256
-  );
-  const signature = await signAWSv4(
-    canonicalRequestSha256,
+    `${canonicalHeaders}\n`,
+    CLOUDSAVE_SIGNED_HEADERS,
+    payloadHash,
+  ].join("\n");
+  const canonicalRequestHash = await digestMessage(canonicalRequest);
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
     scope,
-    s3Settings.s3Region,
-    nowIso8601,
-    signDate,
-    s3Settings.s3SecretKey
-  );
-  fetch(requestUrl, {
-    method: "GET",
-    headers: {
-      Authorization: `AWS4-HMAC-SHA256 Credential=${s3Settings.s3AccessKey}/${scope},SignedHeaders=${signedHeaders},Signature=${signature}`,
-      "x-amz-date": nowIso8601,
-      "x-amz-content-sha256": requestPayloadSha256,
-    },
-    body: saveData,
-  })
-    .then((response) => response.text())
-    .then((base64Bundle) => {
-      Save.base64
-        .import(base64Bundle)
-        .then(() => {
-          /* Success.  Do something special. */
-          UI.alert("Import save from cloud successful!");
-        })
-        .catch((error) => {
-          /* Failure.  Handle the error. */
-          console.error(error);
-          UI.alert(error);
-        });
+    canonicalRequestHash,
+  ].join("\n");
+
+  const dateKey = await hmacSha256(`AWS4${settings.s3SecretKey}`, signDate);
+  const dateRegionKey = await hmacSha256(dateKey, settings.s3Region);
+  const dateRegionServiceKey = await hmacSha256(dateRegionKey, "s3");
+  const signingKey = await hmacSha256(dateRegionServiceKey, "aws4_request");
+  const signature = toHex(await hmacSha256(signingKey, stringToSign));
+
+  return {
+    Authorization: `AWS4-HMAC-SHA256 Credential=${settings.s3AccessKey}/${scope},SignedHeaders=${CLOUDSAVE_SIGNED_HEADERS},Signature=${signature}`,
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": amzDate,
+  };
+}
+
+async function buildSignedRequest(method, settings, payload = "") {
+  validateCloudsaveSettings(settings);
+
+  const { requestUrl } = buildS3Target(settings);
+  const payloadHash =
+    payload.length > 0 ? await digestMessage(payload) : CLOUDSAVE_EMPTY_SHA256;
+  const headers = await createAuthorizationHeaders(method, settings, payloadHash);
+
+  return {
+    requestUrl,
+    payloadHash,
+    headers,
+  };
+}
+
+async function readErrorResponse(response) {
+  const responseText = await response.text();
+
+  if (responseText.trim().length > 0) {
+    return responseText;
+  }
+
+  return `${response.status} ${response.statusText}`.trim();
+}
+
+async function uploadSaveToS3() {
+  try {
+    const settings = getCloudsaveSettings();
+    const saveData = Save.base64.export();
+    const { requestUrl, headers } = await buildSignedRequest(
+      "PUT",
+      settings,
+      saveData
+    );
+    const response = await fetch(requestUrl, {
+      method: "PUT",
+      headers,
+      body: saveData,
     });
+
+    if (!response.ok) {
+      throw new Error(await readErrorResponse(response));
+    }
+
+    UI.alert("云存档上传成功！");
+  } catch (error) {
+    console.error(error);
+    UI.alert(`云存档上传失败：${error.message || error}`);
+  }
+}
+
+async function downloadSaveFromS3() {
+  try {
+    const settings = getCloudsaveSettings();
+    const { requestUrl, headers } = await buildSignedRequest("GET", settings);
+    const response = await fetch(requestUrl, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(await readErrorResponse(response));
+    }
+
+    const base64Bundle = await response.text();
+
+    if (!base64Bundle.trim()) {
+      throw new Error("云端返回了空存档数据");
+    }
+
+    await Save.base64.import(base64Bundle);
+    UI.alert("云存档下载并导入成功！");
+  } catch (error) {
+    console.error(error);
+    UI.alert(`云存档下载失败：${error.message || error}`);
+  }
+}
+
+const existingSetup = Reflect.get(window, "setup");
+const sugarcubeSetup =
+  existingSetup && typeof existingSetup === "object" ? existingSetup : {};
+
+Reflect.set(window, "setup", sugarcubeSetup);
+sugarcubeSetup.cloudsaveS3 = {
+  upload: uploadSaveToS3,
+  download: downloadSaveFromS3,
 };

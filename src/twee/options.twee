@@ -1,5 +1,5 @@
-:: cloudsaveOptions [widget]
-<<widget "cloudsaveOptions">>
+:: cloudsaveS3ConfigFields [widget]
+<<widget "cloudsaveS3ConfigFields">>
 
 <div class="settingsHeader options"><span class="gold">云存档</span></div>
 
@@ -16,5 +16,35 @@
 	</div>
 </div>
 <hr>
+
+<</widget>>
+
+:: CloudSaveS3 Config Overlay
+
+<div class="settingsHeader options"><span class="gold">云存档设置</span></div>
+
+<<button "上传云存档">>
+	<<run setup.cloudsaveS3.upload()>>
+<</button>>
+<<button "下载云存档">>
+	<<run setup.cloudsaveS3.download()>>
+<</button>>
+
+<p>填写 S3 参数后，可以直接在当前界面上传或下载云存档，也可以返回导入/导出界面。</p>
+
+<<cloudsaveS3ConfigFields>>
+
+<<button "返回导入/导出">>
+	<<toggleTab>>
+	<<replace #customOverlayContent>><<optionsExportImport>><</replace>>
+<</button>>
+
+:: cloudsaveS3EntryButton [widget]
+<<widget "cloudsaveS3EntryButton">>
+
+	<<button "云存档">>
+		<<toggleTab>>
+		<<replace #customOverlayContent>><<include "CloudSaveS3 Config Overlay">><</replace>>
+	<</button>>
 
 <</widget>>

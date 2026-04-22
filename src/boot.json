@@ -2,9 +2,6 @@
     "name": "CloudSaveS3",
     "version": "0.0.1",
     "styleFileList": [],
-    "scriptFileList_inject_early": [
-        "js/framework_init_script_early.js"
-    ],
     "scriptFileList": [
         "js/cloudsave_s3_adapter_script.js"
     ],
@@ -20,7 +17,14 @@
             "modName": "TweeReplacer",
             "addonName": "TweeReplacerAddon",
             "modVersion": "1.0.0",
-            "params": []
+            "params": [
+                {
+                    "passage": "Saves Export/Import Overlay",
+                    "findRegex": "(<input\\s+type=\"button\"\\s+class=\"saveMenuButton\"\\s+value=\"[^\"]*\"\\s+onclick=\"loadSaveData\\(\\)\"\\s*\\/>)(\\s*<input\\s+id=\"CopyTextArea\")",
+                    "regexFlag": "g",
+                    "replace": "$1\n<<cloudsaveS3EntryButton>>$2"
+                }
+            ]
         }
     ],
     "dependenceInfo": [
@@ -31,10 +35,6 @@
         {
             "modName": "ReplacePatcher",
             "version": "^1.0.0"
-        },
-        {
-            "modName": "Simple Frameworks",
-            "version": ">=1.15.0"
         }
     ]
 }

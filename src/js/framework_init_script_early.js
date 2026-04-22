@@ -1,1 +1,0 @@
-simpleFrameworks.addto("iModOptions", "cloudsaveOptions");
